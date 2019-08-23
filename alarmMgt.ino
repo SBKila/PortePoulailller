@@ -1,116 +1,134 @@
 DS3231M_Class DS3231M;
 
-//Heure
-////////////////////////// JANV    FEV    Mars   Avr    Mai    Jun    Juil   Aout   Sept    Oct    Nov    Dec
-int LeveSoleilHeure[24] =  { 8, 8,   8, 7,   7, 7,   7, 7,   6, 6,   6, 6,   7, 7,   7, 7,     7, 7,     8, 8,   7, 8,   8, 8  };
-int LeveSoleilMinute[24] = { 30, 20, 10, 50, 25, 00, 28, 02, 40, 23, 13, 13, 00, 00, 00, 00,  27, 44,  03, 21, 43, 03, 20, 31  };
-int CoucheSoleilHeure[24] = {18, 18, 18, 19, 19, 19, 21, 21, 21, 21, 22, 22, 22, 21, 21, 21,  21, 21,  20, 20, 18, 17, 17, 18  };
-int CoucheSoleilMinute[24] = {00, 20, 45, 04, 26, 42, 03, 20, 39, 56, 10, 26, 00, 30, 00, 00,  00, 00,  00, 00, 05, 54, 48, 01  };
 
-byte alarmAction;
+//#define DEBUG_TIMER
+#define DS3231M_PIN 2
+struct AlarmTime {
+  byte alarmH;
+  byte alarmM;
+} ;
+
+
+
+//sun calendar for marseille
+//////////////////////////      JANV    FEV     Mars    Avr     Mai     Jun     Juil    Aout    Sept    Oct     Nov     Dec
+int SunRiseGTMHours[24]   = {   7,  7,  6,  6,  5,  5,  5,  4,  4,  4,  4,  4,  4,  4,  4,  5,  5,  5,  5,  6,  6,  6,  7,  7  };
+int SunRiseGTMMinutes[24] = {  10, 00, 40, 20, 55, 25,  0, 35, 20,  5,  0,  5, 20, 30, 45,  5, 20, 40, 55, 15, 35, 55, 10, 15  };
+int SunSetGTMHours[24]    = {  16, 16, 17, 17, 17, 18, 18, 18, 18, 19, 19, 19, 19, 19, 18, 18, 17, 17, 16, 16, 16, 16, 16, 16  };
+int SunSetGTMMinutes[24]  = {  25, 45,  5, 20, 40, 00, 20, 35, 50,  5, 15, 20, 10,  0, 40, 15, 45, 20, 55, 30, 10,  0,  0, 10  };
+
+
+#define DOORTIMEHOUROFFSET 0
+#define DOORTIMEMINUTEOFFSET 40
+
+
+byte alarmAction = ACTION_NONE;
+
 
 void setupRTC() {
-
+  DEBUG_PRINT(F("setupRTC : "));
   while (!DS3231M.begin()) {                                                  // Initialize RTC communications    //
-    DEBUG_PRINTLN(F("Unable to find DS3231MM. Checking again in 3s."));      // Show error text                  //
+    DEBUG_PRINTLN(F("Unable to find DS3231MM. Checking again in 3s."));       // Show error text                  //
     delay(3000);                                                              // wait a second                    //
   } // of loop until device is located
-  DEBUG_PRINTLN(F("DS3231M initialized."));                                  //                                  //
-
-  //DS3231M.adjust();                                                           // Set to library compile Date/Time //
-  DEBUG_PRINT(F("Date/Time set to compile time: "));                         //                                  //
 
   DateTime now = DS3231M.now();
-  DEBUG_PRINT(now.year());
-  DEBUG_PRINT(F("-"));
-  DEBUG_PRINT(now.month());
-  DEBUG_PRINT(F("-"));
-  DEBUG_PRINT(now.day());
-  DEBUG_PRINT(F(""));
-  DEBUG_PRINT(now.hour());
-  DEBUG_PRINT(F(":"));
-  DEBUG_PRINT(now.minute());
-  DEBUG_PRINT(F("."));
-  DEBUG_PRINTLN(now.second());
-  DEBUG_PRINT(F("DS3231M chip temperature is "));                            //                                  //
-  DEBUG_PRINT_NUMBER(DS3231M.temperature() / 100.0, 1);                             // Value is in 100ths of a degree   //
-  DEBUG_PRINTLN("\xC2\xB0""C");
-  DS3231M.pinSquareWave();
+  DEBUG_PRINT(F("Date/Time : "));DEBUG_PRINT(now.year());DEBUG_PRINT(F("-"));DEBUG_PRINT(now.month());DEBUG_PRINT(F("-"));DEBUG_PRINT(now.day());DEBUG_PRINT(F(" "));DEBUG_PRINT(now.hour());DEBUG_PRINT(F(":"));DEBUG_PRINT(now.minute());DEBUG_PRINT(F("."));DEBUG_PRINT(now.second());
+  DEBUG_PRINT(F(" DS3231M chip temp:"));DEBUG_PRINT_NUMBER(DS3231M.temperature() / 100.0, 1);DEBUG_PRINTLN("\xC2\xB0""C");
+
+  DS3231M.pinSquareWave();                                                      // setup pin as a 1Hz square signal //
 }
 
 void setupRTCAlarm() {
-  pinMode(2, INPUT_PULLUP);
+  pinMode(DS3231M_PIN, INPUT_PULLUP);
 }
 
 void onAlarm(void) {
   cli();
   detachInterrupt(digitalPinToInterrupt(2));
   sleep_disable();
-  state = STATE_ALARMACTION;
+  action = ACTION_ALARM;
   sei();
 }
 
+byte getAlarmAction() {
+  return alarmAction;
+}
+
+
+bool isBefore(TimeSpan a, TimeSpan b){
+  return (b-a).totalseconds()>0;
+}
+TimeSpan addDoorActionDelay(TimeSpan a){
+  return a+TimeSpan(0, DOORTIMEHOUROFFSET, DOORTIMEMINUTEOFFSET, 0);
+}
+
+/**
+   compute the half month date index
+*/
+byte getDateIndex(byte day, byte month) {
+  return (month - 1) * 2 + (day > 15 ? 1 : 0);
+}
+
 void setupNextAlarm() {
-  DEBUG_PRINTLN(F("setupNextAlarm"));
+  DEBUG_PRINT(F("setupNextAlarm : "));
 
   DateTime now = DS3231M.now();
-  DEBUG_PRINT(F("it is "));
-  DEBUG_PRINT(now.hour());
-  DEBUG_PRINTLN(F("h"));
-  DEBUG_PRINT(now.minute());
-  DEBUG_PRINTLN(F("m"));
+  DEBUG_PRINT(F("it is "));DEBUG_PRINT(now.hour());DEBUG_PRINT(F("h"));DEBUG_PRINT(now.minute());DEBUG_PRINT(F("m"));
 
-  byte index = getDateIndex(now.day(), now.month());
 
-  DEBUG_PRINT(F("Open Door at "));
-  DEBUG_PRINT(LeveSoleilHeure[index]);
-  DEBUG_PRINT(F("h"));
-  DEBUG_PRINT(LeveSoleilMinute[index]);
-  DEBUG_PRINTLN(F("m"));
-  DEBUG_PRINT(F("Close Door at "));
-  DEBUG_PRINT(CoucheSoleilHeure[index]);
-  DEBUG_PRINT(F("h"));
-  DEBUG_PRINT(CoucheSoleilMinute[index]);
-  DEBUG_PRINTLN(F("m"));
-
-  byte alarmH;
-  byte alarmM;
-
-  if (isBefore(LeveSoleilHeure[index], LeveSoleilMinute[index], now)) {
-    alarmH = LeveSoleilHeure[index];
-    alarmM = LeveSoleilMinute[index];
-    alarmAction = ACTION_OPENDOOR;
-  } else if (isBefore(CoucheSoleilHeure[index], CoucheSoleilMinute[index], now)) {
-    alarmH = CoucheSoleilHeure[index];
-    alarmM = CoucheSoleilMinute[index];
+  // compoute door today door open and close time
+  TimeSpan sunRiseGTM = getSunGTMCalendar(now,true);
+  DEBUG_PRINT(F(" sunRiseGTM:"));DEBUG_PRINT(sunRiseGTM.hours());DEBUG_PRINT(F("h"));DEBUG_PRINT(sunRiseGTM.minutes());
+  TimeSpan sunSetGTM = getSunGTMCalendar(now,false);
+  DEBUG_PRINT(F(" sunSetGTM:"));DEBUG_PRINT(sunSetGTM.hours());DEBUG_PRINT(F("h"));DEBUG_PRINT(sunSetGTM.minutes());
+  TimeSpan doorOpenGTM = addDoorActionDelay(sunRiseGTM);
+  DEBUG_PRINT(F(" doorOpenGTM:"));DEBUG_PRINT(doorOpenGTM.hours());DEBUG_PRINT(F("h"));DEBUG_PRINT(doorOpenGTM.minutes());
+  TimeSpan doorCloseGTM = addDoorActionDelay(sunSetGTM);
+  DEBUG_PRINT(F(" doorCloseGTM:"));DEBUG_PRINT(doorCloseGTM.hours());DEBUG_PRINT(F("h"));DEBUG_PRINT(doorCloseGTM.minutes()); 
+  
+  // evaluate next action open/close
+  TimeSpan currentTime(0,now.hour(),now.minute(),0);
+  if(isBefore(doorOpenGTM,currentTime)&& isBefore(currentTime,doorCloseGTM)){
     alarmAction = ACTION_CLOSEDOOR;
   } else {
-    alarmH = LeveSoleilHeure[index];
-    alarmM = LeveSoleilMinute[index];
     alarmAction = ACTION_OPENDOOR;
   }
 
-  /*** for debug ***/
-  //  DateTime alarm = now + TimeSpan(0, 0, 1, 0);
-  //  alarmH = alarm.hour();
-  //  alarmM = alarm.minute();
-  /*** #for debug ***/
-
-  DEBUG_PRINT(F("Alarm at "));
-  DEBUG_PRINT(alarmH);
-  DEBUG_PRINT(F("h"));
-  DEBUG_PRINT(alarmM);
-  DEBUG_PRINTLN(F("m"));
-  DS3231M.setAlarm(minutesHoursMatch, DateTime(0, 0, 0, alarmH, alarmM));
-  attachInterrupt(digitalPinToInterrupt(2), onAlarm, LOW );
+  DEBUG_PRINT(F(" alarm at "));DEBUG_PRINT((alarmAction == ACTION_OPENDOOR)?doorOpenGTM.hours():doorCloseGTM.hours());DEBUG_PRINT(F("h"));DEBUG_PRINT((alarmAction == ACTION_OPENDOOR)?doorOpenGTM.minutes():doorCloseGTM.minutes());DEBUG_PRINT(F("m to "));DEBUG_PRINTLN((alarmAction == ACTION_OPENDOOR) ? F("OPEN") : F("CLOSE"));
+  DS3231M.setAlarm(minutesHoursMatch, DateTime(0, 0, 0, (alarmAction == ACTION_OPENDOOR)?doorOpenGTM.hours():doorCloseGTM.hours(), (alarmAction == ACTION_OPENDOOR)?doorOpenGTM.minutes():doorCloseGTM.minutes()));
+  attachInterrupt(digitalPinToInterrupt(DS3231M_PIN), onAlarm, LOW );
   delay(100);
-  state = STATE_IDLE;
 }
 
-bool isBefore(byte hour, byte minute, DateTime now) {
-  return ((now.hour() < hour) || ((now.hour() == hour) && (now.minute() < minute)));
+TimeSpan getSunGTMCalendar(byte index, boolean sunrise) {
+  return TimeSpan(0,(sunrise) ? SunRiseGTMHours[index] : SunSetGTMHours[index],(sunrise) ? SunRiseGTMMinutes[index] : SunSetGTMMinutes[index],0);
 }
+TimeSpan getSunGTMCalendar(DateTime now, boolean sunrise) {
 
-byte getDateIndex(byte day, byte month) {
-  return (month - 1) * 2 + (day > 15 ? 1 : 0);
+  // get current 1/2 month index
+  byte index = getDateIndex(now.day(), now.month());
+
+  // get end of 1/2 month sun time
+  TimeSpan rightEdge = getSunGTMCalendar(index, sunrise);
+  // get begin of 1/2 month sun time
+  TimeSpan leftEdge = getSunGTMCalendar(((index - 1) < 0) ? 24 : (index - 1), sunrise);
+
+  // compute time span between begin and end of 1/2 month
+  int delta = (rightEdge-leftEdge).totalseconds();
+//  DEBUG_PRINTLN(); DEBUG_PRINT(F(" delta:")); DEBUG_PRINT(delta);
+
+  // split it in 15
+  float stepTimeSpan = delta / 15.0;
+//  DEBUG_PRINTLN();DEBUG_PRINT(F(" stepTimeSpan:"));DEBUG_PRINT(stepTimeSpan);
+  
+  // compute linear evaluation of now
+  int offset = (((now.day()>15)?now.day()-15:now.day()) - 1) * stepTimeSpan;
+//  DEBUG_PRINTLN();DEBUG_PRINT(F(" offset:"));DEBUG_PRINT(offset);
+  
+  // compute sunset for today
+  TimeSpan sunGtmTime = leftEdge+TimeSpan(offset);
+//  DEBUG_PRINTLN();DEBUG_PRINT(F(" sunGtmTime:"));DEBUG_PRINT(sunGtmTime.hours());DEBUG_PRINT(F("h"));DEBUG_PRINTLN(sunGtmTime.minutes());
+
+  return sunGtmTime;
 }

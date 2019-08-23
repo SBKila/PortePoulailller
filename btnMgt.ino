@@ -1,29 +1,14 @@
-byte btnAction = ACTION_OPENDOOR;
-
 void setupBtn() {
+  DEBUG_PRINTLN(F("setup Btn"));
   /* Setup the pin direction. */
-  pinMode(3, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(3), onBtn, LOW );
+  pinMode(BTN_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(BTN_PIN), onBtn, LOW );
 }
 
 void onBtn() {
   cli();
-  detachInterrupt(digitalPinToInterrupt(3));
+  detachInterrupt(digitalPinToInterrupt(BTN_PIN));
   sleep_disable();
-  state = STATE_BTNACTION;
-  btnAction = (btnAction == ACTION_OPENDOOR) ? ACTION_CLOSEDOOR : ACTION_OPENDOOR;
+  action = ACTION_BTN;
   sei();
-}
-
-void performBtnAction() {
-  if ( digitalRead(3) == LOW) {
-    moveManuDoor(btnAction == ACTION_OPENDOOR);
-  } else {
-    DEBUG_PRINTLN(F(""));
-    DEBUG_PRINTLN(F("stopManuDoor"));
-    stopManuDoor();
-    delay(10);
-    attachInterrupt(digitalPinToInterrupt(3), onBtn, LOW );
-    state = STATE_IDLE;
-  }
 }
