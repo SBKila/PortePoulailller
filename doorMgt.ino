@@ -12,6 +12,9 @@ long CURRENTPOSITION_OFFSET = sizeof(byte) + sizeof(long);
 long lowPosition = -1;
 long highPosition = -1;
 
+long getLowPosition() {
+  return lowPosition;
+}
 void setLowPosition() {
   lowPosition = stepper.getCurrentPositionInSteps();
   if (highPosition != 0) {
@@ -25,6 +28,9 @@ void setLowPosition() {
   DEBUG_PRINT(F("setLowPosition "));DEBUG_PRINTLN(lowPosition);
 }
 
+long getHighPosition() {
+  return highPosition;
+}
 void setHighPosition() {
   if (lowPosition == 0) {
     highPosition = stepper.getCurrentPositionInSteps();
@@ -32,6 +38,10 @@ void setHighPosition() {
     EEPROM.put(TAG_OFFSET,187);
     DEBUG_PRINT(F("setHighPosition "));DEBUG_PRINTLN(highPosition);
   }
+}
+
+long getCurrentPosition(){
+  return stepper.getCurrentPositionInSteps();
 }
 
 void setupDoor() {
@@ -90,7 +100,8 @@ boolean moveDoor() {
 }
 
 void stopDoor() {
-  DEBUG_PRINTLN(F("stopDoor "));
+  DEBUG_PRINT(F("stopDoor at "));
+  DEBUG_PRINTLN(stepper.getCurrentPositionInSteps());
   // stop ongoing movement
   stepper.setupStop();
 }

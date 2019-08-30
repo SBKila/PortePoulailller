@@ -18,12 +18,12 @@
 
 
 
-#define BTN_PIN 3
 
 
-//#define ACTION_IDLEDOOR    0
+#define ACTION_IDLEDOOR    0
 #define ACTION_OPENDOOR    1
 #define ACTION_CLOSEDOOR   2
+
 
 
 
@@ -65,6 +65,11 @@ void setup() {
 
   setState(STATE_IDLE);
   setupNextAlarm();
+
+  // set last btn performed action
+  if(getCurrentPosition()==getHighPosition()){
+    btnAction = ACTION_OPENDOOR;
+  }
 }
 
 void loop() {
@@ -94,7 +99,7 @@ void loop() {
     }
   }
   if (state == STATE_DOORMANUMOTION) {
-    if ( digitalRead(BTN_PIN) == LOW) {
+    if ( isBtnPushed() ) {
       moveDoor();
     } else {
       stopDoor();
@@ -146,6 +151,14 @@ void setState(int newState) {
 }
 
 
+/***************************************************
+   Name:        performAlarmAction
+   Returns:     Nothing.
+   Parameters:  Nothing.
+   Description: perform the action corresponding to
+                alarm action.
+
+***************************************************/
 void performAlarmAction() {
   DEBUG_PRINTLN(F("performAlarmAction"));
   // clean action
@@ -165,10 +178,27 @@ void performAlarmAction() {
   setupNextAlarm();
 }
 
+/***************************************************
+   Name:        performBtnAction
+   Returns:     Nothing.
+   Parameters:  Nothing.
+   Description: perform the action corresponding to
+                btn action according to system state
 
+***************************************************/
 void performBtnAction() {
   //DEBUG_PRINTLN(F("performBtnAction"));
+  
+  //prevente from switch rebond
+  delay(300);
+
+  
   switch (state) {
+    /**
+     * when system is in idle mode and :
+     *    button is released before 2 seconds start an automatic move 
+     *    button is pressed during more than 2 seconds switch to setup mode
+     */
     case STATE_IDLE:
       // setup btn click time
       if (btnActionStartTime == 0) {
@@ -176,8 +206,9 @@ void performBtnAction() {
         btnAction = (btnAction == ACTION_OPENDOOR) ? ACTION_CLOSEDOOR : ACTION_OPENDOOR;
       }
 
-      if ( digitalRead(3) == HIGH ) {
-        // Automatic
+      // btn is released
+      if ( digitalRead(3) == HIGH ) { 
+        // Automatic move
         startMoveAutoDoor(btnAction == ACTION_OPENDOOR);
         // change system state
         setState(STATE_DOORAUTOMOTION);
@@ -185,10 +216,10 @@ void performBtnAction() {
         action = ACTION_NONE;
         // reset btn click time
         btnActionStartTime = 0;
-        // reset btn
+        // reset btn interuption mgr
         setupBtn();
-      } else if ( millis() - btnActionStartTime > 2000 )  {
-        // if still pushed => Manual setup
+      } else if ( millis() - btnActionStartTime > 2000 )  { // if still pushed
+        // Manual move
         startMoveManuDoor(btnAction == ACTION_OPENDOOR);
         // change system state
         setState(STATE_DOORMANUMOTION);
@@ -198,23 +229,26 @@ void performBtnAction() {
         btnActionStartTime = 0;
       }
       break;
+      /**
+       * If btn is pushed while door moving
+       * stop mvt and back to idle state
+       */
     case STATE_DOORAUTOMOTION:
+      // stop door mvt
       stopDoor();
+      // back to idle
       setState(STATE_IDLE);
-
       // wait btn release before continue
       while ( digitalRead(3) == LOW) {};
-
       // clean action
       action = ACTION_NONE;
-
-      // reset btn
+      // reset btn interuption mgr
       setupBtn();
       break;
     default:
       DEBUG_PRINT(F("performBtnAction skipped "));
       DEBUG_PRINTLN(state);
       break;
-
   }
+  
 }
