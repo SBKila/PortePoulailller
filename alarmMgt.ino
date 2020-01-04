@@ -20,7 +20,7 @@ int SunSetGTMMinutes[24]  = {  25, 45,  5, 20, 40, 00, 20, 35, 50,  5, 15, 20, 1
 
 
 #define DOORTIMEHOUROFFSET 0
-#define DOORTIMEMINUTEOFFSET 30
+#define DOORTIMEMINUTEOFFSET 20
 
 
 byte alarmAction = ACTION_NONE;
@@ -79,17 +79,21 @@ void setupNextAlarm() {
 
   DateTime now = DS3231M.now();
   DEBUG_PRINT(F("it is ")); DEBUG_PRINT(now.hour()); DEBUG_PRINT(F("h")); DEBUG_PRINT(now.minute()); DEBUG_PRINT(F("m"));
-
+DEBUG_PRINTLN("");
 
   // compoute door today door open and close time
   TimeSpan sunRiseGTM = getSunGTMCalendar(now, true);
   DEBUG_PRINT(F(" sunRiseGTM:")); DEBUG_PRINT(sunRiseGTM.hours()); DEBUG_PRINT(F("h")); DEBUG_PRINT(sunRiseGTM.minutes()); DEBUG_PRINT(F("m")); DEBUG_PRINT(sunRiseGTM.seconds());DEBUG_PRINT(" "); DEBUG_PRINT(sunRiseGTM.totalseconds());
+  DEBUG_PRINTLN("");
   TimeSpan sunSetGTM = getSunGTMCalendar(now, false);
   DEBUG_PRINT(F(" sunSetGTM:")); DEBUG_PRINT(sunSetGTM.hours()); DEBUG_PRINT(F("h")); DEBUG_PRINT(sunSetGTM.minutes());DEBUG_PRINT(" "); DEBUG_PRINT(sunSetGTM.totalseconds());
+  DEBUG_PRINTLN("");
   TimeSpan doorOpenGTM = addDoorActionDelay(sunRiseGTM);
   DEBUG_PRINT(F(" doorOpenGTM:")); DEBUG_PRINT(doorOpenGTM.hours()); DEBUG_PRINT(F("h")); DEBUG_PRINT(doorOpenGTM.minutes()); DEBUG_PRINT(" "); DEBUG_PRINT(doorOpenGTM.totalseconds());
+  DEBUG_PRINTLN("");
   TimeSpan doorCloseGTM = addDoorActionDelay(sunSetGTM);
   DEBUG_PRINT(F(" doorCloseGTM:")); DEBUG_PRINT(doorCloseGTM.hours()); DEBUG_PRINT(F("h")); DEBUG_PRINT(doorCloseGTM.minutes());; DEBUG_PRINT(" "); DEBUG_PRINT(doorCloseGTM.totalseconds());
+  DEBUG_PRINTLN("");
 
   // evaluate next action open/close
   TimeSpan currentTime(0, now.hour(), now.minute(), 0);
@@ -116,34 +120,45 @@ void setupNextAlarm() {
   delay(100);
 }
 
+void printDate(TimeSpan currentTime){
+  DEBUG_PRINT(currentTime.hours()); DEBUG_PRINT(F("h")); DEBUG_PRINT(currentTime.minutes()); DEBUG_PRINT(" "); DEBUG_PRINT(currentTime.totalseconds());  
+}
+
+
 TimeSpan getSunGTMCalendar(byte index, boolean sunrise) {
+  //DEBUG_PRINT(F("getSunGTMCalendar("));DEBUG_PRINT(index);DEBUG_PRINT(F(","));DEBUG_PRINT(sunrise);DEBUG_PRINTLN(F(")"));
   return TimeSpan(0, (sunrise) ? SunRiseGTMHours[index] : SunSetGTMHours[index], (sunrise) ? SunRiseGTMMinutes[index] : SunSetGTMMinutes[index], 0);
 }
 TimeSpan getSunGTMCalendar(DateTime now, boolean sunrise) {
-
+  //DEBUG_PRINT(F("getSunGTMCalendar("));DEBUG_PRINT(now);DEBUG_PRINT(F(","));DEBUG_PRINT(sunrise);DEBUG_PRINTLN(F(")"));
   // get current 1/2 month index
   byte index = getDateIndex(now.day(), now.month());
-
+  //DEBUG_PRINTLN(); DEBUG_PRINT(F(" index:"));DEBUG_PRINT(index);
+  
   // get end of 1/2 month sun time
+  //DEBUG_PRINTLN(); 
   TimeSpan rightEdge = getSunGTMCalendar(index, sunrise);
+  //DEBUG_PRINT(F(" rightEdge:"));printDate(rightEdge);
   // get begin of 1/2 month sun time
-  TimeSpan leftEdge = getSunGTMCalendar(((index - 1) < 0) ? 24 : (index - 1), sunrise);
+  //DEBUG_PRINTLN(); 
+  TimeSpan leftEdge = getSunGTMCalendar(((index - 1) < 0) ? 23 : (index - 1), sunrise);
+  //DEBUG_PRINT(F(" leftEdge:"));printDate(leftEdge);
 
   // compute time span between begin and end of 1/2 month
   int delta = (rightEdge - leftEdge).totalseconds();
-  //  DEBUG_PRINTLN(); DEBUG_PRINT(F(" delta:")); DEBUG_PRINT(delta);
+  //DEBUG_PRINTLN(); DEBUG_PRINT(F(" delta:")); DEBUG_PRINT(delta);
 
   // split it in 15
   float stepTimeSpan = delta / 15.0;
-  //  DEBUG_PRINTLN();DEBUG_PRINT(F(" stepTimeSpan:"));DEBUG_PRINT(stepTimeSpan);
+  //DEBUG_PRINTLN();DEBUG_PRINT(F(" stepTimeSpan:"));DEBUG_PRINT(stepTimeSpan);
 
   // compute linear evaluation of now
   int offset = (((now.day() > 15) ? now.day() - 15 : now.day()) - 1) * stepTimeSpan;
-  //  DEBUG_PRINTLN();DEBUG_PRINT(F(" offset:"));DEBUG_PRINT(offset);
+  //DEBUG_PRINTLN();DEBUG_PRINT(F(" offset:"));DEBUG_PRINT(offset);
 
   // compute sunset for today
   TimeSpan sunGtmTime = leftEdge + TimeSpan(offset);
-  //  DEBUG_PRINTLN();DEBUG_PRINT(F(" sunGtmTime:"));DEBUG_PRINT(sunGtmTime.hours());DEBUG_PRINT(F("h"));DEBUG_PRINTLN(sunGtmTime.minutes());
+  //DEBUG_PRINTLN();DEBUG_PRINT(F(" sunGtmTime:"));DEBUG_PRINT(sunGtmTime.hours());DEBUG_PRINT(F("h"));DEBUG_PRINTLN(sunGtmTime.minutes());
 
   // skip seconds
   return TimeSpan(0,sunGtmTime.hours(),sunGtmTime.minutes(),0);
